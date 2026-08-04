@@ -1,0 +1,102 @@
+package com.example
+
+import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+impjjbgggggort androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.ui.InstantCashViewModel
+import com.example.ui.components.*
+import com.example.ui.screens.*
+import com.example.ui.theme.InstantCashTheme
+
+class MainActivity : ComponentActivity() {
+
+    private val viewModel: InstantCashViewModel by viewModels()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+
+        setContent {
+            InstantCashTheme {
+                InstantCashApp(viewModel = viewModel)
+            }
+        }
+    }
+}
+
+@Composable
+fun InstantCashApp(viewModel: InstantCashViewModel) {
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
+    val allTasks by viewModel.allTasks.collectAsStateWithLifecycle()
+    val filteredTasks by viewModel.filteredTasks.collectAsStateWithLifecycle()
+    val currentTab by viewModel.currentTab.collectAsStateWithLifecycle()
+    val selectedTaskId by viewModel.selectedTaskId.collectAsStateWithLifecycle()
+
+    val selectedTask = allTasks.find { it.id == selectedTaskId }
+    val role = userProfile?.role ?: "WORKER"
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            TopAppHeader(
+                userRole = role,
+                balance = userProfile?.balance ?: 0.0,
+                pendingEscrow = userProfile?.pendingEscrow ?: 0.0,
+                onRoleToggle = { viewModel.toggleUserRole() },
+                onNotificationsClick = { viewModel.selectTab("NOTIFICATIONS") }
+            )
+        },
+        bottomBar = {
+            BottomNavBar(
+                currentTab = currentTab,
+                role = role,
+                onTabSelected = { viewModel.selectTab(it) }
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { innerPadding ->
+        Box(modifier = Modifier.padding(innerPadding)) {
+            when {
+                selectedTask != null -> JobDetailScreen(
+                    task = selectedTask,
+                    userRole = role,
+                    onBackClick = { viewModel.clearSelectedTask() },
+                    onAcceptJob = { viewModel.acceptTask(it.id) },
+                    onCompleteJob = { viewModel.completeTask(it.id) }
+                )
+                currentTab == "HOME" -> WorkerHomeScreen(
+                    tasks = filteredTasks,
+                    onTaskClick = { viewModel.selectTask(it.id) }
+                )
+                currentTab == "POST_JOB" -> PostJobScreen(
+                    onJobPosted = { title, cat, amount, desc ->
+                        viewModel.postNewTask(title, cat, amount, desc)
+                    }
+                )
+                currentTab == "WALLET" -> WalletScreen(
+                    balance = userProfile?.balance ?: 0.0,
+                    pendingEscrow = userProfile?.pendingEscrow ?: 0.0,
+                    onCashOutClick = { amount -> viewModel.cashOut(amount) }
+                )
+                currentTab == "CUSTOMER_DASHBOARD" -> CustomerDashboardScreen(
+                    postedJobs = allTasks.filter { it.postedByUserId == userProfile?.id },
+                    onJobClick = { viewModel.selectTask(it.id) }
+                )
+            }
+        }
+    }
+}
